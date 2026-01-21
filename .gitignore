@@ -1,0 +1,21 @@
+# General
+.DS_Store
+*.log
+*.pot
+*.pyc
+__pycache__/
+
+# Python
+venv/
+env/
+.env
+.venv/
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+
+# Editors
+.vscode/
+.idea/
