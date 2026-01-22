@@ -40,17 +40,23 @@ jobs:
     
     - name: Run tests
       env:
-        # UPDATED: Matches your settings.py exactly okay for tests
+        # Database Settings
         DB_NAME: test_db
         DB_USER: postgres
         DB_PASSWORD: postgres
         DB_HOST: localhost
         DB_PORT: 5432
+        
+        # Django Critical Settings (These were missing!)
         SECRET_KEY: test-secret-key-for-ci
         DEBUG: True
+        ALLOWED_HOSTS: localhost,127.0.0.1,*
+        CORS_ALLOW_ALL_ORIGINS: True
+        
       run: |
         python manage.py test
 
+        
   deploy:
     needs: test
     runs-on: ubuntu-latest
