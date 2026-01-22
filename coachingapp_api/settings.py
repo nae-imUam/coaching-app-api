@@ -152,13 +152,13 @@ CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=boo
 
 if not CORS_ALLOW_ALL_ORIGINS:
     # We add a default here just in case, to prevent crashing
-    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000', cast=Csv())
+    # Default to a safe string, or allow localhost
+    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,https://coachingapp.in,https://www.coachingapp.in', cast=Csv())
 
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default=[])
-
-
+# We use a string default because 'cast=Csv()' expects text, not a list.
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='http://localhost,coachingapp.in,capi.coachingapp.in')
 # ==============================================================================
 #  REST FRAMEWORK
 # ==============================================================================
