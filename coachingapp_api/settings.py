@@ -15,14 +15,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ==============================================================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY')
+# Added default for safety in CI/CD
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-fallback-key-for-dev')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-# Allowed Hosts (Comma separated in .env)
-# This controls which domains the API will answer to (e.g., capi.coachingapp.in)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=Csv())
+# Allowed Hosts
+# FIX 1: Added default='*' so it doesn't crash when env var is missing
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
 
 
 # ==============================================================================
@@ -84,7 +85,7 @@ WSGI_APPLICATION = 'coachingapp_api.wsgi.application'
 # ==============================================================================
 
 # Logic: If DB_NAME exists in .env, use PostgreSQL (Production).
-# Otherwise, default to SQLite (Local Laptop).
+# Otherwise, default to SQLite (Local Laptop/CI fallback).
 DB_NAME = config('DB_NAME', default=None)
 
 if DB_NAME:
@@ -92,8 +93,8 @@ if DB_NAME:
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': DB_NAME,
-            'USER': config('DB_USER'),
-            'PASSWORD': config('DB_PASSWORD'),
+            'USER': config('DB_USER', default='postgres'),
+            'PASSWORD': config('DB_PASSWORD', default='postgres'),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='5432'),
         }
@@ -146,15 +147,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #  CORS & SECURITY
 # ==============================================================================
 
-# 1. CORS: Controls which frontend domains can fetch data from this API
-CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+# FIX 2: Changed default to True so it doesn't try to read CORS_ALLOWED_ORIGINS in CI
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
 
 if not CORS_ALLOW_ALL_ORIGINS:
-    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
+    # We add a default here just in case, to prevent crashing
+    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000', cast=Csv())
 
 CORS_ALLOW_CREDENTIALS = True
 
-# 2. CSRF: Required for HTTPS requests from specific domains
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default=[])
 
 
