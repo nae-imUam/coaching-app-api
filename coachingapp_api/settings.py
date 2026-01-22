@@ -158,7 +158,10 @@ if not CORS_ALLOW_ALL_ORIGINS:
 CORS_ALLOW_CREDENTIALS = True
 
 # We use a string default because 'cast=Csv()' expects text, not a list.
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='http://localhost,coachingapp.in,capi.coachingapp.in')
+# Added 'https://' to every domain
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='http://localhost,https://coachingapp.in,https://capi.coachingapp.in')
+
+
 # ==============================================================================
 #  REST FRAMEWORK
 # ==============================================================================
