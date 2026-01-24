@@ -83,16 +83,50 @@ class BatchSerializer(serializers.ModelSerializer):
         return obj.students.count()
 
 
+# class StudentSerializer(serializers.ModelSerializer):
+#     batch_name = serializers.CharField(source='batch.name', read_only=True)
+#     fees_due = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+#     phone = serializers.CharField()
+#     profile_pic = serializers.ImageField(required=False, allow_null=True)
+    
+#     class Meta:
+#         model = Student
+#         fields = ['id', 'batch', 'batch_name', 'name', 'phone', 'roll', 'total_fees', 
+#                   'fees_paid', 'fees_due', 'profile_pic', 'created_at', 'updated_at']
+#         read_only_fields = ['id', 'fees_due', 'created_at', 'updated_at']
+
+
+
+# In serializers.py - Update StudentSerializer
+
 class StudentSerializer(serializers.ModelSerializer):
     batch_name = serializers.CharField(source='batch.name', read_only=True)
     fees_due = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     phone = serializers.CharField()
+    # Make profile_pic completely optional - don't include in validation if not a file
+    profile_pic = serializers.ImageField(required=False, allow_null=True, use_url=True)
     
     class Meta:
         model = Student
         fields = ['id', 'batch', 'batch_name', 'name', 'phone', 'roll', 'total_fees', 
                   'fees_paid', 'fees_due', 'profile_pic', 'created_at', 'updated_at']
         read_only_fields = ['id', 'fees_due', 'created_at', 'updated_at']
+    
+    def to_internal_value(self, data):
+        # CRITICAL FIX: Remove profile_pic from data if it's not a valid file
+        if 'profile_pic' in data:
+            profile_pic = data.get('profile_pic')
+            # If it's None, empty string, or not a file object, remove it
+            if not profile_pic or not hasattr(profile_pic, 'read'):
+                data = data.copy()
+                data.pop('profile_pic', None)
+        
+        return super().to_internal_value(data)
+
+
+
+
+
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
