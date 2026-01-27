@@ -150,17 +150,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # FIX 2: Changed default to True so it doesn't try to read CORS_ALLOWED_ORIGINS in CI
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
 
+
+
 if not CORS_ALLOW_ALL_ORIGINS:
     # We add a default here just in case, to prevent crashing
     # Default to a safe string, or allow localhost
-    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,https://coachingapp.in,https://www.coachingapp.in', cast=Csv())
+    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', 
+        default='http://localhost:3000,http://localhost:5173,https://coachingapp.in,https://www.coachingapp.in,https://capi.coachingapp.in', 
+        cast=Csv()
+    )
 
 CORS_ALLOW_CREDENTIALS = True
 
 # We use a string default because 'cast=Csv()' expects text, not a list.
 # Added 'https://' to every domain
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='http://localhost,https://coachingapp.in,https://capi.coachingapp.in')
-
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', 
+    cast=Csv(), 
+    default='http://localhost,http://localhost:5173,https://coachingapp.in,https://capi.coachingapp.in,https://www.coachingapp.in'
+)
 
 # ==============================================================================
 #  REST FRAMEWORK
