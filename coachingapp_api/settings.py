@@ -208,3 +208,13 @@ AUTH_USER_MODEL = 'api.User'
 # Phone Number Field Settings
 PHONENUMBER_DEFAULT_REGION = 'IN'
 PHONENUMBER_DB_FORMAT = 'NATIONAL'
+
+
+# Email Configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'nae.imuam103@gmail.com'
+EMAIL_HOST_PASSWORD = 'akzd uabo evwz aeen'
+DEFAULT_FROM_EMAIL = 'nae.imuam103@gmail.com'

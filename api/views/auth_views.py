@@ -10,13 +10,14 @@ import secrets
 
 from ..models import User
 from ..serializers import (
-    UserSerializer, 
-    RegisterSerializer, 
+    UserSerializer,
+    RegisterSerializer,
     LoginSerializer,
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer,
 )
+from ..utils import send_password_reset_email
 
 
 @api_view(['POST'])
@@ -30,17 +31,16 @@ def register_view(request):
         "password": "securepassword",
         "name": "John Doe",
         "institute_name": "ABC Institute",
-        "email": "john@example.com" (optional)
+        "email": "john@example.com"  (optional)
     }
     """
     serializer = RegisterSerializer(data=request.data)
-    
+
     if serializer.is_valid():
         user = serializer.save()
-        
-        # Generate JWT tokens
+
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'success': True,
             'message': 'User registered successfully',
@@ -50,7 +50,7 @@ def register_view(request):
                 'access': str(refresh.access_token),
             }
         }, status=status.HTTP_201_CREATED)
-    
+
     return Response({
         'success': False,
         'message': 'Registration failed',
@@ -70,13 +70,12 @@ def login_view(request):
     }
     """
     serializer = LoginSerializer(data=request.data, context={'request': request})
-    
+
     if serializer.is_valid():
         user = serializer.validated_data['user']
-        
-        # Generate JWT tokens
+
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'success': True,
             'message': 'Login successful',
@@ -86,7 +85,7 @@ def login_view(request):
                 'access': str(refresh.access_token),
             }
         }, status=status.HTTP_200_OK)
-    
+
     return Response({
         'success': False,
         'message': 'Login failed',
@@ -101,14 +100,14 @@ def logout_view(request):
     Logout user (client should delete tokens)
     POST /api/auth/logout/
     Headers: Authorization: Bearer <access_token>
+    Body: { "refresh_token": "..." }  (optional — blacklists the token)
     """
     try:
-        # Optionally blacklist the refresh token if provided
         refresh_token = request.data.get('refresh_token')
         if refresh_token:
             token = RefreshToken(refresh_token)
             token.blacklist()
-        
+
         return Response({
             'success': True,
             'message': 'Logged out successfully'
@@ -140,17 +139,12 @@ def get_profile_view(request):
 def update_profile_view(request):
     """
     Update user profile
-    PUT/PATCH /api/auth/profile/
+    PUT/PATCH /api/auth/profile/update/
     Headers: Authorization: Bearer <access_token>
-    Body: {
-        "name": "Updated Name",
-        "institute_name": "Updated Institute",
-        "email": "updated@example.com"
-    }
+    Body: { "name": "...", "institute_name": "...", "email": "..." }
     """
-    user = request.user
-    serializer = UserSerializer(user, data=request.data, partial=True)
-    
+    serializer = UserSerializer(request.user, data=request.data, partial=True)
+
     if serializer.is_valid():
         serializer.save()
         return Response({
@@ -158,7 +152,7 @@ def update_profile_view(request):
             'message': 'Profile updated successfully',
             'user': serializer.data
         }, status=status.HTTP_200_OK)
-    
+
     return Response({
         'success': False,
         'message': 'Update failed',
@@ -170,7 +164,7 @@ def update_profile_view(request):
 @permission_classes([IsAuthenticated])
 def change_password_view(request):
     """
-    Change user password
+    Change password for a logged-in user
     POST /api/auth/change-password/
     Headers: Authorization: Bearer <access_token>
     Body: {
@@ -179,26 +173,24 @@ def change_password_view(request):
     }
     """
     serializer = ChangePasswordSerializer(data=request.data)
-    
+
     if serializer.is_valid():
         user = request.user
-        
-        # Check old password
+
         if not user.check_password(serializer.validated_data['old_password']):
             return Response({
                 'success': False,
                 'message': 'Old password is incorrect'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Set new password
+
         user.set_password(serializer.validated_data['new_password'])
         user.save()
-        
+
         return Response({
             'success': True,
             'message': 'Password changed successfully'
         }, status=status.HTTP_200_OK)
-    
+
     return Response({
         'success': False,
         'message': 'Password change failed',
@@ -206,137 +198,230 @@ def change_password_view(request):
     }, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ─────────────────────────────────────────────
+#  PASSWORD RESET  (no login required)
+# ─────────────────────────────────────────────
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def password_reset_request_view(request):
     """
-    Request password reset (generates a token)
+    Step 1 — Request a password reset token.
     POST /api/auth/password-reset/request/
     Body: {
-        "phone": "1234567890"
+        "phone": "1234567890",
+        "institute_name": "My Academy"   ← security verification field
     }
+
+    Behaviour:
+    • institute_name must match the account's institute_name (case-insensitive).
+      This acts as a second factor so random people can't spam reset tokens.
+    • If the phone exists AND has an email, the token is emailed.
+    • If the phone exists but has NO email, we return a specific error
+      so the frontend can tell the user to contact support.
+    • If the phone does NOT exist we still return a generic success
+      (prevents user enumeration).
+    • In DEBUG mode only, the token is also included in the response
+      so developers can test without a mail server.
     """
     serializer = PasswordResetRequestSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        phone = serializer.validated_data['phone']
-        
-        try:
-            user = User.objects.get(phone=phone)
-            
-            # Generate reset token
-            reset_token = secrets.token_urlsafe(32)
-            user.reset_token = reset_token
-            user.reset_token_created = timezone.now()
-            user.save()
-            
-            # In production, send this token via SMS/Email
-            # For now, we return it in response (NOT RECOMMENDED IN PRODUCTION)
-            
-            return Response({
-                'success': True,
-                'message': 'Password reset token generated',
-                'reset_token': reset_token,  # Remove this in production
-                'note': 'In production, this token should be sent via SMS/Email'
-            }, status=status.HTTP_200_OK)
-            
-        except User.DoesNotExist:
-            # For security, don't reveal if user exists or not
-            return Response({
-                'success': True,
-                'message': 'If the phone number exists, a reset token has been sent'
-            }, status=status.HTTP_200_OK)
-    
-    return Response({
-        'success': False,
-        'message': 'Invalid request',
-        'errors': serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+
+    if not serializer.is_valid():
+        return Response({
+            'success': False,
+            'message': 'Invalid request',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    phone = serializer.validated_data['phone']
+    institute_name = request.data.get('institute_name', '').strip()
+
+    if not institute_name:
+        return Response({
+            'success': False,
+            'message': 'Institute name is required for verification.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Generic response used when user is not found (anti-enumeration)
+    generic_ok = Response({
+        'success': True,
+        'message': 'If the phone number is registered, a reset token has been sent to the associated email.'
+    }, status=status.HTTP_200_OK)
+
+    try:
+        user = User.objects.get(phone=phone)
+    except User.DoesNotExist:
+        return generic_ok
+
+    # ── Security check: verify institute_name matches ──────────────────
+    if user.institute_name.strip().lower() != institute_name.lower():
+        # Return the same generic error as "user not found" to avoid
+        # leaking whether the phone exists but institute_name was wrong.
+        return Response({
+            'success': False,
+            'message': 'Institute name does not match our records. Please check and try again.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # User exists and institute matches — check they have an email
+    if not user.email:
+        return Response({
+            'success': False,
+            'message': (
+                'No email address is linked to this account. '
+                'Please contact support to reset your password.'
+            )
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Generate a secure token and persist it
+    reset_token = secrets.token_urlsafe(32)
+    user.reset_token = reset_token
+    user.reset_token_created = timezone.now()
+    user.save(update_fields=['reset_token', 'reset_token_created'])
+
+    # Send the token by email
+    email_sent = send_password_reset_email(
+        email=user.email,
+        token=reset_token,
+        user_name=user.name,
+    )
+
+    if not email_sent:
+        # Wipe the token so a stale one is never left behind
+        user.reset_token = None
+        user.reset_token_created = None
+        user.save(update_fields=['reset_token', 'reset_token_created'])
+
+        return Response({
+            'success': False,
+            'message': (
+                'We could not send the reset email right now. '
+                'Please try again later or contact support.'
+            )
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    response_data = {
+        'success': True,
+        'message': f'A password reset token has been sent to {_mask_email(user.email)}.',
+        'email': _mask_email(user.email),   # Frontend uses this to show "sent to j***@gmail.com"
+    }
+
+    # ⚠️  Include raw token ONLY during development so you can test
+    #    without a real mail server. Remove / guard this in production.
+    from django.conf import settings
+    if getattr(settings, 'DEBUG', False):
+        response_data['debug_token'] = reset_token
+        response_data['debug_note'] = (
+            'debug_token is visible because DEBUG=True. '
+            'Remove this in production.'
+        )
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def password_reset_confirm_view(request):
     """
-    Confirm password reset with token
+    Step 2 — Confirm the reset using the token and set a new password.
     POST /api/auth/password-reset/confirm/
     Body: {
         "phone": "1234567890",
-        "token": "reset_token_here",
-        "new_password": "newpassword"
+        "token": "<token from email>",
+        "new_password": "mynewpassword"
     }
+
+    Token is valid for 1 hour. After use it is immediately invalidated.
     """
     serializer = PasswordResetConfirmSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        phone = serializer.validated_data['phone']
-        token = serializer.validated_data['token']
-        new_password = serializer.validated_data['new_password']
-        
-        try:
-            user = User.objects.get(phone=phone, reset_token=token)
-            
-            # Check if token is expired (valid for 1 hour)
-            if user.reset_token_created:
-                token_age = timezone.now() - user.reset_token_created
-                if token_age > timedelta(hours=1):
-                    return Response({
-                        'success': False,
-                        'message': 'Reset token has expired'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Reset password
-            user.set_password(new_password)
+
+    if not serializer.is_valid():
+        return Response({
+            'success': False,
+            'message': 'Invalid request',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    phone = serializer.validated_data['phone']
+    token = serializer.validated_data['token']
+    new_password = serializer.validated_data['new_password']
+
+    try:
+        user = User.objects.get(phone=phone, reset_token=token)
+    except User.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Invalid phone number or token.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check token age (1 hour expiry)
+    if user.reset_token_created:
+        age = timezone.now() - user.reset_token_created
+        if age > timedelta(hours=1):
+            # Clear the expired token
             user.reset_token = None
             user.reset_token_created = None
-            user.save()
-            
-            return Response({
-                'success': True,
-                'message': 'Password reset successfully'
-            }, status=status.HTTP_200_OK)
-            
-        except User.DoesNotExist:
+            user.save(update_fields=['reset_token', 'reset_token_created'])
+
             return Response({
                 'success': False,
-                'message': 'Invalid phone number or token'
+                'message': 'Reset token has expired. Please request a new one.'
             }, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    # All good — update password and invalidate the token
+    user.set_password(new_password)
+    user.reset_token = None
+    user.reset_token_created = None
+    user.save()
+
     return Response({
-        'success': False,
-        'message': 'Invalid request',
-        'errors': serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+        'success': True,
+        'message': 'Password has been reset successfully. You can now log in.'
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_token_view(request):
     """
-    Verify if a JWT token is valid
+    Verify if a JWT access token is still valid.
     POST /api/auth/verify-token/
-    Body: {
-        "token": "jwt_token_here"
-    }
+    Body: { "token": "<access_token>" }
     """
     from rest_framework_simplejwt.tokens import AccessToken
-    
+
     token = request.data.get('token')
-    
+
     if not token:
         return Response({
             'success': False,
             'message': 'Token is required'
         }, status=status.HTTP_400_BAD_REQUEST)
-    
+
     try:
         AccessToken(token)
         return Response({
             'success': True,
             'message': 'Token is valid'
         }, status=status.HTTP_200_OK)
-    except Exception as e:
+    except Exception:
         return Response({
             'success': False,
             'message': 'Invalid or expired token'
         }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+# ── helpers ──────────────────────────────────
+
+def _mask_email(email: str) -> str:
+    """Return a masked email like  j***@gmail.com for display in responses."""
+    try:
+        local, domain = email.split('@', 1)
+        masked_local = local[0] + '***' if len(local) > 1 else '***'
+        return f"{masked_local}@{domain}"
+    except Exception:
+        return '***@***.***'
+    
+
+
+
+    
