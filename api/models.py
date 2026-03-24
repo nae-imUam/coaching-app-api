@@ -9,7 +9,6 @@ class UserManager(BaseUserManager):
     def create_user(self, phone, password=None, **extra_fields):
         if not phone:
             raise ValueError('Users must have a phone number')
-        
         user = self.model(phone=phone, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -19,36 +18,35 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
-
         return self.create_user(phone, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    phone = PhoneNumberField(unique=True, region='IN')
-    name = models.CharField(max_length=255)
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    phone          = PhoneNumberField(unique=True, region='IN')
+    name           = models.CharField(max_length=255)
     institute_name = models.CharField(max_length=255)
-    email = models.EmailField(max_length=255, blank=True, null=True)
-    
-    is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
+    email          = models.EmailField(max_length=255, blank=True, null=True)
+
+    is_active    = models.BooleanField(default=True)
+    is_staff     = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # Password reset
-    reset_token = models.CharField(max_length=100, blank=True, null=True)
+    reset_token         = models.CharField(max_length=100, blank=True, null=True)
     reset_token_created = models.DateTimeField(blank=True, null=True)
 
     objects = UserManager()
 
-    USERNAME_FIELD = 'phone'
+    USERNAME_FIELD  = 'phone'
     REQUIRED_FIELDS = ['name', 'institute_name']
 
     class Meta:
-        db_table = 'users'
-        verbose_name = 'User'
+        db_table      = 'users'
+        verbose_name  = 'User'
         verbose_name_plural = 'Users'
 
     def __str__(self):
@@ -56,10 +54,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Batch(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='batches')
-    name = models.CharField(max_length=255)
-    timing = models.CharField(max_length=100)
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user    = models.ForeignKey(User, on_delete=models.CASCADE, related_name='batches')
+    name    = models.CharField(max_length=255)
+    timing  = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -72,25 +70,25 @@ class Batch(models.Model):
 
 
 class Student(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='students')
+    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user  = models.ForeignKey(User, on_delete=models.CASCADE, related_name='students')
     batch = models.ForeignKey(Batch, on_delete=models.SET_NULL, null=True, related_name='students')
-    
-    name = models.CharField(max_length=255)
+
+    name  = models.CharField(max_length=255)
     phone = PhoneNumberField(region='IN')
-    roll = models.CharField(max_length=50, blank=True)
-    
+    roll  = models.CharField(max_length=50, blank=True)
+
     total_fees = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    fees_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    
+    fees_paid  = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     profile_pic = models.ImageField(upload_to='student_profiles/', blank=True, null=True)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'students'
-        ordering = ['name']
+        db_table       = 'students'
+        ordering       = ['name']
         unique_together = ['user', 'roll']
 
     def __str__(self):
@@ -102,16 +100,16 @@ class Student(models.Model):
 
 
 class Attendance(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='attendances')
+    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user  = models.ForeignKey(User, on_delete=models.CASCADE, related_name='attendances')
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name='attendances')
-    date = models.DateField()
+    date  = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'attendances'
-        ordering = ['-date']
+        db_table       = 'attendances'
+        ordering       = ['-date']
         unique_together = ['user', 'batch', 'date']
 
     def __str__(self):
@@ -119,18 +117,21 @@ class Attendance(models.Model):
 
 
 class AttendanceRecord(models.Model):
+    # ── STATUS: added 'leave' ──────────────────────────────────────────────────
+    # Run: python manage.py makemigrations && python manage.py migrate
     STATUS_CHOICES = [
         ('present', 'Present'),
-        ('absent', 'Absent'),
+        ('absent',  'Absent'),
+        ('leave',   'Leave'),   # ← NEW
     ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     attendance = models.ForeignKey(Attendance, on_delete=models.CASCADE, related_name='records')
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendance_records')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='absent')
+    student    = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendance_records')
+    status     = models.CharField(max_length=10, choices=STATUS_CHOICES, default='absent')
 
     class Meta:
-        db_table = 'attendance_records'
+        db_table       = 'attendance_records'
         unique_together = ['attendance', 'student']
 
     def __str__(self):
@@ -138,14 +139,14 @@ class AttendanceRecord(models.Model):
 
 
 class FeePayment(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fee_payments')
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user    = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fee_payments')
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='payments')
-    
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    amount       = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateTimeField(default=timezone.now)
-    notes = models.TextField(blank=True)
-    
+    notes        = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -159,22 +160,22 @@ class FeePayment(models.Model):
 
 class Test(models.Model):
     BOARD_CHOICES = [
-        ('CBSE', 'CBSE'),
+        ('CBSE',        'CBSE'),
         ('Bihar Board', 'Bihar Board'),
-        ('ICSE', 'ICSE'),
+        ('ICSE',        'ICSE'),
         ('State Board', 'State Board'),
     ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tests')
+
+    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user  = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tests')
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name='tests')
-    
-    name = models.CharField(max_length=255)
-    date = models.DateField()
+
+    name        = models.CharField(max_length=255)
+    date        = models.DateField()
     total_marks = models.IntegerField()
-    duration = models.DecimalField(max_digits=4, decimal_places=2)  # in hours
-    board = models.CharField(max_length=50, choices=BOARD_CHOICES, default='CBSE')
-    
+    duration    = models.DecimalField(max_digits=4, decimal_places=2)   # hours
+    board       = models.CharField(max_length=50, choices=BOARD_CHOICES, default='CBSE')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -187,17 +188,17 @@ class Test(models.Model):
 
 
 class TestMark(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='marks')
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    test    = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='marks')
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='test_marks')
-    
+
     marks_obtained = models.DecimalField(max_digits=6, decimal_places=2)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'test_marks'
+        db_table       = 'test_marks'
         unique_together = ['test', 'student']
 
     def __str__(self):
